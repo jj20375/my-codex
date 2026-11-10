@@ -1,0 +1,35 @@
+{
+  "name": "codex-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "check": "npm run check --workspaces",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:api": "npm run dev -w apps/api",
+    "dev:runner": "npm run dev -w apps/runner",
+    "db:migrate": "npm run migrate -w apps/api",
+    "test:integration": "node tests/integration.mjs",
+    "test:prepare": "node scripts/prepare-integration.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "tsx": "^4.20.6",
+    "@types/node": "^22.18.0"
+  },
+  "overrides": {
+    "@nestjs/platform-express": {
+      "multer": "^2.5.0"
+    },
+    "sequelize": {
+      "uuid": "^11.1.1"
+    }
+  }
+}

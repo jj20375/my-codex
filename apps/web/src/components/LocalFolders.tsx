@@ -1,0 +1,27 @@
+/** @file 連接主機資料夾、瀏覽內容與確認原檔變更；所有修改僅由擁有者按下套用觸發。 */
+import { useState } from 'react';
+import useSWR from 'swr';
+import { FolderOpen, X } from 'lucide-react';
+import { api } from './api';
+import type { ReferenceFolder as Folder } from './ReferenceFolders';
+interface Operation { /** 變更類型。 */ type: 'move'|'mkdir'|'write'; /** 原相對路徑。 */ from?: string; /** 新相對路徑。 */ to: string; /** 新文字內容。 */ text?: string }
+interface Plan { /** 清單識別碼。 */ id: string; /** 目標資料夾。 */ connectionId: string; /** 持久狀態。 */ state: string; /** 原檔變更列表。 */ operations: Operation[]; /** 已完成動作。 */ applied: Operation[]; /** 失敗原因。 */ error?: string }
+/** 檔案服務未啟動時顯示具體啟動方式，不在網頁存放服務金鑰。 */
+export default function LocalFolders({ sessionId, close }: { /** 目前聊天。 */ sessionId: string; /** 關閉視窗。 */ close: () => void }) {
+  /** 新連接的預設授權為唯讀。 */
+  const [mode,setMode]=useState<'read'|'readwrite'>('read');
+  /** 可選擇原生對話框或手動輸入主機絕對路徑。 */
+  const [path,setPath]=useState('');
+  /** 等待主機對話框或檔案變更完成。 */
+  const [busy,setBusy]=useState(false);
+  /** 操作失敗保留視窗與完整待確認清單。 */
+  const [error,setError]=useState('');
+  /** 瀏覽的授權資料夾與相對位置。 */
+  const [selected,setSelected]=useState('');const [directory,setDirectory]=useState('');
+  const base=`/sessions/${sessionId}`;
+  const {data:folders=[],error:folderError,mutate:refreshFolders}=useSWR<Folder[]>(base+'/local-folders',api,{refreshInterval:5000,shouldRetryOnError:false});
+  const {data:plans=[],mutate:refreshPlans}=useSWR<Plan[]>(folders.length?base+'/local-plans':null,api,{refreshInterval:3000});
+  const {data:entries=[],error:entriesError}=useSWR<Array<{name:string;type:string}>>(selected?`${base}/local-folders/${selected}/entries?path=${encodeURIComponent(directory)}`:null,api);
+  async function action(url:string,body?:unknown) {setBusy(true);setError('');try{await api(url,{method:'POST',body:body?JSON.stringify(body):undefined});await refreshFolders();await refreshPlans();}catch(error){setError(error instanceof Error?error.message:'操作失敗');}finally{setBusy(false);}}
+  return <div className="local-folders-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="local-folders-title" className="local-folders-dialog"><header><h2 id="local-folders-title">連接本機資料夾</h2><button className="icon-button" aria-label="關閉本機資料夾" onClick={close}><X size={18}/></button></header><p className="form-hint">第一次請使用新增聊天。資料夾由主機服務持續連接，原檔修改須在下方確認清單後套用。</p><div className="local-folder-connect"><label>資料夾權限<select value={mode} onChange={event=>setMode(event.target.value as 'read'|'readwrite')}><option value="read">唯讀分析</option><option value="readwrite">允許修改（需確認清單）</option></select></label><button className="primary-button" disabled={busy} onClick={()=>void action(base+'/local-folders',{mode})}>{busy?'等待主機操作…':'選擇本機資料夾'}</button><details><summary>或輸入主機絕對路徑</summary><form onSubmit={event=>{event.preventDefault();void action(base+'/local-folders',{mode,path});}}><input aria-label="主機資料夾路徑" value={path} onChange={event=>setPath(event.target.value)} placeholder="例如 D:\文件 或 /home/me/documents" required/><button className="text-button" disabled={busy}>連接此路徑</button></form></details></div>{(error||folderError) && <p role="alert" className="form-error">{error||folderError?.message}</p>}<h3>此聊天已連接的參考資料夾（{folders.length}）</h3><p className="form-hint">清單只屬於目前聊天。同一資料夾不能重複加入；中斷連接不會刪除本機檔案。</p>{folders.map(folder=><article className="local-folder-card" key={folder.id}><button onClick={()=>{setSelected(folder.id);setDirectory('');}}><FolderOpen size={16}/><strong>{folder.name}</strong></button><small>{folder.root} · {folder.mode==='read'?'唯讀':'允許修改'}</small><button className="text-button" disabled={busy} onClick={()=>{if(selected===folder.id)setSelected('');void action(`${base}/local-folders/${folder.id}/disconnect`);}}>中斷連接</button></article>)}{selected&&<div className="local-folder-entries"><strong>/{directory}</strong><button className="text-button" onClick={()=>setDirectory(directory.split('/').slice(0,-1).join('/'))}>上一層</button>{entriesError&&<p role="alert">{entriesError.message}</p>}{entries.map(entry=><div key={entry.name}>{entry.type==='directory'?<button onClick={()=>setDirectory([directory,entry.name].filter(Boolean).join('/'))}>📁 {entry.name}</button>:<span>{entry.name}</span>}</div>)}</div>}<h3>待確認與歷史變更清單</h3>{!plans.length&&<p className="form-hint">連接後可以在聊天輸入：「閱讀資料夾內容，提出分類與重新命名清單，等我確認後再修改。」</p>}{[...plans].reverse().map(plan=><article className="local-plan" key={plan.id}><strong>{folders.find(folder=>folder.id===plan.connectionId)?.name??'已中斷的資料夾'} · {({proposed:'待確認',applying:'套用中',completed:'已完成',failed:'部分操作失敗',needs_review:'需要檢查',rejected:'已略過'} as Record<string,string>)[plan.state]??plan.state}</strong><ol>{plan.operations.map((operation,index)=><li key={index}>{operation.type==='move'?`${operation.from} → ${operation.to}`:operation.type==='mkdir'?`建立資料夾：${operation.to}`:`修改文字：${operation.to}`}{operation.type==='write'&&<details><summary>檢視完整新內容</summary><pre>{operation.text}</pre></details>}</li>)}</ol>{plan.state==='proposed'&&<><button className="primary-button" disabled={busy||!folders.some(folder=>folder.id===plan.connectionId)} onClick={()=>void action(`${base}/local-plans/${plan.id}/apply`)}>確認並套用 {plan.operations.length} 項原檔變更</button><button className="text-button" disabled={busy} onClick={()=>void action(`${base}/local-plans/${plan.id}/reject`)}>略過此清單</button></>}{['failed','needs_review'].includes(plan.state)&&<p role="alert">{plan.error}；已完成 {plan.applied.length} 項，請檢查後重新產生清單。</p>}</article>)}</section></div>;
+}

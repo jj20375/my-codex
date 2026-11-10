@@ -1,0 +1,24 @@
+services:
+  api:
+    environment:
+      DB_HOST: database
+      DB_PORT: 3306
+    depends_on:
+      database: { condition: service_healthy }
+  database:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-codex_workspace}
+      MARIADB_USER: ${DB_USER:-codex_workspace}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?請先執行安裝設定}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?請先執行安裝設定}
+    volumes: ["database_data:/var/lib/mysql"]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 512m
+volumes:
+  database_data:

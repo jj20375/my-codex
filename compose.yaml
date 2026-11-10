@@ -1,0 +1,74 @@
+name: personal-codex
+services:
+  web:
+    build: { context: ., target: web }
+    ports: ["127.0.0.1:${WEB_PORT:-4327}:8080"]
+    depends_on: { api: { condition: service_healthy } }
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777,size=32m"]
+    mem_limit: 128m
+    pids_limit: 64
+  api:
+    build: { context: ., target: api }
+    environment:
+      DB_HOST: ${DOCKER_DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-9529}
+      DB_NAME: ${DB_NAME:-codex_workspace}
+      DB_USER: ${DB_USER:-codex_workspace}
+      DB_PASSWORD: ${DB_PASSWORD:?請先執行安裝設定}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?請先執行安裝設定}
+      SESSION_SECRET: ${SESSION_SECRET:?請先執行安裝設定}
+      RUNNER_SECRET: ${RUNNER_SECRET:?請先執行安裝設定}
+      RUNNER_URL: http://runner:3041
+      LOCAL_FILES_URL: http://host.docker.internal:3042
+      LOCAL_FILES_SECRET: ${LOCAL_FILES_SECRET:-}
+      WEB_ORIGIN: http://localhost:${WEB_PORT:-4327}
+      COOKIE_SECURE: "false"
+      DATA_DIR: /data/api
+      UPLOAD_DIR: /uploads
+      WORKSPACE_DIR: /workspace
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes: ["api_data:/data/api", "uploads:/uploads", "workspaces:/workspace:ro"]
+    depends_on: { runner: { condition: service_healthy } }
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/api/auth/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777,size=64m"]
+    mem_limit: 512m
+    pids_limit: 128
+  runner:
+    build: { context: ., target: runner }
+    environment:
+      RUNNER_SECRET: ${RUNNER_SECRET:?請先執行安裝設定}
+      CODEX_STATE_DIR: /data/codex
+      UPLOAD_DIR: /uploads
+      WORKSPACE_DIR: /workspace
+    volumes: ["codex_state:/data/codex", "workspaces:/workspace", "uploads:/uploads:ro"]
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3041/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ["/tmp:mode=1777,size=512m", "/home/node:uid=1000,gid=1000,mode=0700,size=128m"]
+    mem_limit: 2g
+    pids_limit: 256
+volumes:
+  api_data:
+  uploads:
+  workspaces:
+  codex_state:

@@ -1,0 +1,32 @@
+{
+  "name": "@workspace/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "astro build",
+    "check": "astro check",
+    "dev": "astro dev",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/react": "^7.1.2",
+    "@tailwindcss/vite": "^4.1.0",
+    "astro": "^7.4.4",
+    "lucide-react": "^0.468.0",
+    "oxc-transform-react": "^0.145.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.18.5",
+    "remark-gfm": "^4.0.1",
+    "swr": "^2.3.6",
+    "tailwindcss": "^4.1.0",
+    "prismjs": "^1.30.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0"
+  }
+}
